@@ -20,6 +20,25 @@ public class DeliveryPackageJobConfig {
     @Value("${GOT_LOST:false}")
     private String GOT_LOST;
 
+    // Step #4
+    @Bean
+    public Step storePackageStep(JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        return new StepBuilder("storePackageStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+
+                        System.out.println("== Storing the package while the customer address is located.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
     // Step #3
     @Bean
     public Step givePackageToCustomerStep(JobRepository jobRepository,
@@ -87,7 +106,10 @@ public class DeliveryPackageJobConfig {
         return new JobBuilder("deliverPackageJob", jobRepository)
                 .start(packageItemStep(jobRepository, transactionManager))
                 .next(driveToAddressStep(jobRepository, transactionManager))
-                .next(givePackageToCustomerStep(jobRepository, transactionManager))
+                    .on("FAILED").to(storePackageStep(jobRepository, transactionManager))
+                .from(driveToAddressStep(jobRepository, transactionManager))
+                    .on("*").to(givePackageToCustomerStep(jobRepository, transactionManager))
+                .end()
                 .build();
     }
 }

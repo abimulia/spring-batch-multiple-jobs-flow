@@ -19,4 +19,4 @@ Then run the created jar
 ` java -jar .\batch-process-1.0.0.jar "item=shoes" "run.date=2024-12-25,java.time.LocalDate"`
 
 to simulate error got lost set the environment variable
-`$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"`
+`$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"` for normal run
