@@ -3,9 +3,12 @@ package com.abimulia.batch.batch_process.config;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.StepContribution;
-import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.StepExecutionListener;
+import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
+import org.springframework.batch.core.job.flow.support.SimpleFlow;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -13,32 +16,138 @@ import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.decider.DeliveryDecider;
 import com.abimulia.batch.batch_process.decider.ReceiptDecider;
+import com.abimulia.batch.batch_process.listener.FlowerSelectionStepExecutionListener;
 
+import lombok.extern.slf4j.Slf4j;
 
-@EnableBatchProcessing
+@Configuration
+@Slf4j
 public class DeliveryPackageJobConfig {
+
+    /* Flower Job Section */
+    @Bean
+    public StepExecutionListener selectFlowerListener() {
+        log.debug("## StepExecutionListener()");
+        return new FlowerSelectionStepExecutionListener();
+    }
+
+    // Step #3
+    @Bean
+    public Step arrangeFlowersStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## arrangeFlowersStep()");
+        return new StepBuilder("arrangeFlowersStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+                        log.info("##Arranging flowers");
+                        System.out.println("== Arranging flowers for order.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
+    // Step #2
+    @Bean
+    public Step removeThornsStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## removeThornsStep()");
+        return new StepBuilder("removeThornsStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+                        log.info("#Remove thorns");
+                        System.out.println("== Remove thorns from roses.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
+    // Step #1
+    @Bean
+    public Step selectFlowersStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## selectFlowersStep()");
+        return new StepBuilder("selectFlowersStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+                        log.info("#Gather flowers");
+                        System.out.println("== Gathering flowers for order.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .listener(selectFlowerListener())
+                .build();
+    }
+
+    @Bean
+    public Job prepareFlowersJob(JobRepository jobRepository, Step selectFlowersStep, Step removeThornsStep,
+            Step arrangeFlowersStep, Flow deliveryFLow) {
+        log.debug("### prepareFlowersJob() repository: " + jobRepository);
+        return new JobBuilder("prepareFlowersJob", jobRepository)
+                .start(selectFlowersStep)
+                .on("TRIM_REQUIRED").to(removeThornsStep)
+                .next(arrangeFlowersStep)
+                .from(selectFlowersStep).on("NO_TRIM_REQUIRED")
+                .to(arrangeFlowersStep)
+                .from(arrangeFlowersStep).on("*").to(deliveryFLow)
+                .end()
+                .build();
+
+    }
+    /* End FLower Job Section */
+
     // Get Environment Variable to simulate error
     @Value("${GOT_LOST:false}")
     private String GOT_LOST;
 
     @Bean
     public JobExecutionDecider deliveryDecider() {
+        log.debug("JobExecutionDecider");
         return new DeliveryDecider();
     }
 
     @Bean
-    JobExecutionDecider receiptDecider() {
+    public JobExecutionDecider receiptDecider() {
+        log.debug("receiptDecider()");
         return new ReceiptDecider();
+    }
+
+    @Bean
+    public Flow deliveryFLow(Step driveToAddressStep, Step givePackageToCustomerStep, Step thankStep, Step refundStep,
+            Step leaveAtDoorStep) {
+        log.debug("## deliveryFLow()");
+        return new FlowBuilder<SimpleFlow>("deliveryFlow")
+                .start(driveToAddressStep)
+                .on("FAILED").fail()
+                .from(driveToAddressStep)
+                .on("*").to(deliveryDecider())
+                .on("PRESENT").to(givePackageToCustomerStep)
+                .next(receiptDecider()).on("CORRECT").to(thankStep)
+                .from(receiptDecider()).on("INCORRECT").to(refundStep)
+                .from(deliveryDecider())
+                .on("NOT_PRESENT").to(leaveAtDoorStep)
+                .build();
     }
 
     // Step #7
     @Bean
-    public Step thankStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step thankStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## thankStep()");
         return new StepBuilder("thankStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -56,8 +165,8 @@ public class DeliveryPackageJobConfig {
 
     // Step #6
     @Bean
-    public Step refundStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step refundStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## refundStep()");
         return new StepBuilder("refundStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -75,8 +184,8 @@ public class DeliveryPackageJobConfig {
 
     // Step #5
     @Bean
-    public Step leaveAtDoorStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step leaveAtDoorStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## leaveAtDoorStep()");
         return new StepBuilder("leaveAtDoorStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -94,8 +203,8 @@ public class DeliveryPackageJobConfig {
 
     // Step #4
     @Bean
-    public Step storePackageStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step storePackageStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## storePackageStep()");
         return new StepBuilder("storePackageStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -113,8 +222,8 @@ public class DeliveryPackageJobConfig {
 
     // Step #3
     @Bean
-    public Step givePackageToCustomerStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step givePackageToCustomerStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## givePackageToCustomerStep()");
         return new StepBuilder("givePackageToCustomerStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -132,8 +241,8 @@ public class DeliveryPackageJobConfig {
 
     // Step #2
     @Bean
-    public Step driveToAddressStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step driveToAddressStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## driveToAddressStep()");
         return new StepBuilder("driveToAddressStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -154,8 +263,8 @@ public class DeliveryPackageJobConfig {
 
     // Step #1
     @Bean
-    public Step packageItemStep(JobRepository jobRepository,
-            PlatformTransactionManager transactionManager) {
+    public Step packageItemStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## packageItemStep()");
         return new StepBuilder("packageItemStep", jobRepository)
                 .tasklet(new Tasklet() {
 
@@ -174,18 +283,11 @@ public class DeliveryPackageJobConfig {
 
     // Job Delivery
     @Bean
-    public Job deliverPackageJob(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+    public Job deliverPackageJob(JobRepository jobRepository, Step packageItemStep, Flow deliveryFLow) {
+        log.debug("### deliverPackageJob() repository: " + jobRepository);
         return new JobBuilder("deliverPackageJob", jobRepository)
-                .start(packageItemStep(jobRepository, transactionManager))
-                .next(driveToAddressStep(jobRepository, transactionManager))
-                .on("FAILED").fail()
-                .from(driveToAddressStep(jobRepository, transactionManager))
-                .on("*").to(deliveryDecider())
-                .on("PRESENT").to(givePackageToCustomerStep(jobRepository, transactionManager))
-                .next(receiptDecider()).on("CORRECT").to(thankStep(jobRepository, transactionManager))
-                .from(receiptDecider()).on("INCORRECT").to(refundStep(jobRepository, transactionManager))
-                .from(deliveryDecider())
-                .on("NOT_PRESENT").to(leaveAtDoorStep(jobRepository, transactionManager))
+                .start(packageItemStep)
+                .on("*").to(deliveryFLow)
                 .end()
                 .build();
     }
