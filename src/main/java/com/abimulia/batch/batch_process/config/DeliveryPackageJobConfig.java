@@ -4,6 +4,7 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.StepContribution;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -14,11 +15,37 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.abimulia.batch.batch_process.decider.DeliveryDecider;
+
 @Configuration
 public class DeliveryPackageJobConfig {
     // Get Environment Variable to simulate error
     @Value("${GOT_LOST:false}")
     private String GOT_LOST;
+
+    @Bean
+    public JobExecutionDecider deliveryDecider() {
+        return new DeliveryDecider();
+    }
+
+    // Step #5
+    @Bean
+    public Step leaveAtDoorStep(JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        return new StepBuilder("leaveAtDoorStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+
+                        System.out.println("== Leaving the package at the door.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
 
     // Step #4
     @Bean
@@ -108,7 +135,10 @@ public class DeliveryPackageJobConfig {
                 .next(driveToAddressStep(jobRepository, transactionManager))
                     .on("FAILED").to(storePackageStep(jobRepository, transactionManager))
                 .from(driveToAddressStep(jobRepository, transactionManager))
-                    .on("*").to(givePackageToCustomerStep(jobRepository, transactionManager))
+                    .on("*").to(deliveryDecider())
+                        .on("PRESENT").to(givePackageToCustomerStep(jobRepository, transactionManager))
+                    .from(deliveryDecider())
+                        .on("NOT_PRESENT").to(leaveAtDoorStep(jobRepository, transactionManager))
                 .end()
                 .build();
     }
