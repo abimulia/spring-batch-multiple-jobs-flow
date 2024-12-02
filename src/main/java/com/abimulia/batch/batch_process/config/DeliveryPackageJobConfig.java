@@ -31,7 +31,6 @@ import lombok.extern.slf4j.Slf4j;
 public class DeliveryPackageJobConfig {
 
     /* Billing Section */
-
     // billingFlow Flow #2
     @Bean
     public Flow billingFlow(JobRepository jobRepository, Step sendInvoiceStep) {
