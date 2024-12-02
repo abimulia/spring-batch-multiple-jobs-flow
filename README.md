@@ -20,3 +20,5 @@ Then run the created jar
 
 to simulate error got lost set the environment variable
 `$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"` for normal run
+addition
+`$env:IS_PRESENT = "true"` to simulate customer is present and `$env:IS_PRESENT = "false"` to simulate customer is not present

@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.decider.DeliveryDecider;
+import com.abimulia.batch.batch_process.decider.ReceiptDecider;
 
 @Configuration
 public class DeliveryPackageJobConfig {
@@ -26,6 +27,49 @@ public class DeliveryPackageJobConfig {
     @Bean
     public JobExecutionDecider deliveryDecider() {
         return new DeliveryDecider();
+    }
+
+    @Bean
+    JobExecutionDecider receiptDecider() {
+        return new ReceiptDecider();
+    }
+
+    // Step #7
+    @Bean
+    public Step thankStep(JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        return new StepBuilder("thankStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+
+                        System.out.println("== Thanking the customer.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
+    // Step #6
+    @Bean
+    public Step refundStep(JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        return new StepBuilder("refundStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+
+                        System.out.println("== Refunding customer money.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
     }
 
     // Step #5
@@ -133,12 +177,14 @@ public class DeliveryPackageJobConfig {
         return new JobBuilder("deliverPackageJob", jobRepository)
                 .start(packageItemStep(jobRepository, transactionManager))
                 .next(driveToAddressStep(jobRepository, transactionManager))
-                    .on("FAILED").to(storePackageStep(jobRepository, transactionManager))
+                .on("FAILED").to(storePackageStep(jobRepository, transactionManager))
                 .from(driveToAddressStep(jobRepository, transactionManager))
-                    .on("*").to(deliveryDecider())
-                        .on("PRESENT").to(givePackageToCustomerStep(jobRepository, transactionManager))
-                    .from(deliveryDecider())
-                        .on("NOT_PRESENT").to(leaveAtDoorStep(jobRepository, transactionManager))
+                .on("*").to(deliveryDecider())
+                .on("PRESENT").to(givePackageToCustomerStep(jobRepository, transactionManager))
+                .next(receiptDecider()).on("CORRECT").to(thankStep(jobRepository, transactionManager))
+                .from(receiptDecider()).on("INCORRECT").to(refundStep(jobRepository, transactionManager))
+                .from(deliveryDecider())
+                .on("NOT_PRESENT").to(leaveAtDoorStep(jobRepository, transactionManager))
                 .end()
                 .build();
     }
