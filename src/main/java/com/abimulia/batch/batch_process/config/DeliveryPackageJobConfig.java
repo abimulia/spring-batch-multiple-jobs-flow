@@ -3,6 +3,7 @@ package com.abimulia.batch.batch_process.config;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.StepContribution;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.core.repository.JobRepository;
@@ -12,13 +13,13 @@ import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.decider.DeliveryDecider;
 import com.abimulia.batch.batch_process.decider.ReceiptDecider;
 
-@Configuration
+
+@EnableBatchProcessing
 public class DeliveryPackageJobConfig {
     // Get Environment Variable to simulate error
     @Value("${GOT_LOST:false}")
@@ -177,7 +178,7 @@ public class DeliveryPackageJobConfig {
         return new JobBuilder("deliverPackageJob", jobRepository)
                 .start(packageItemStep(jobRepository, transactionManager))
                 .next(driveToAddressStep(jobRepository, transactionManager))
-                .on("FAILED").to(storePackageStep(jobRepository, transactionManager))
+                .on("FAILED").fail()
                 .from(driveToAddressStep(jobRepository, transactionManager))
                 .on("*").to(deliveryDecider())
                 .on("PRESENT").to(givePackageToCustomerStep(jobRepository, transactionManager))

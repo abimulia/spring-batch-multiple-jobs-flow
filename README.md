@@ -22,3 +22,6 @@ to simulate error got lost set the environment variable
 `$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"` for normal run
 addition
 `$env:IS_PRESENT = "true"` to simulate customer is present and `$env:IS_PRESENT = "false"` to simulate customer is not present
+
+to run the flower job
+`java -jar "-Dspring.batch.job.names=prepareFlowersJob" .\batch-process-1.0.0.jar "type=roses" "run.date=2024-12-16,java.time.LocalDate"`
