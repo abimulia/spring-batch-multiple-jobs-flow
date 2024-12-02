@@ -15,29 +15,34 @@ This will show how to use spring-batch framework to run batch process.
 Run `mvn spring-boot:run` for a dev server. 
 
 To run job with parameter need to package the project using maven build with goals clean package
-Then run the created jar 
+Then run the created jar with the following command  
+
 `java -jar .\batch-process-1.0.0.jar "item=shoes" "run.date=2024-12-25,java.time.LocalDate"`
 
 `java -jar .\batch-process-1.0.0.jar "item=shoes" "run.date=2024-12-17,java.time.LocalDate"`
 
 to simulate error got lost set the environment variable
-`$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"` for normal run
-addition
-`$env:IS_PRESENT = "true"` to simulate customer is present and `$env:IS_PRESENT = "false"` to simulate customer is not present
 
-to run the flower job
+`$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"` for normal run 
+
+additional setting for another condition is 
+
+`$env:IS_PRESENT = "true"` to simulate customer is present and  
+`$env:IS_PRESENT = "false"` to simulate customer is not present
+
+to run the flower job  
 `java -jar "-Dspring.batch.job.name=prepareFlowersJob" .\batch-process-1.0.0.jar "type=roses" "run.date=2024-12-16,java.time.LocalDate"`
 
-When there are multiple jobs we need to specify one default job name in the application.properties
+When there are multiple jobs we need to specify one default job name in the application.properties  
 `spring.batch.job.name=deliverPackageJob`
 
-or you'll get this error
+or you'll get this error  
 ![image](https://github.com/user-attachments/assets/b342c12c-1189-4157-8ea7-128096465096)
 
-so when you run without specifying job name the default job will be running
+so when you run without specifying job name the default job will be running 
 
 ![image](https://github.com/user-attachments/assets/e8ceef44-b558-47b1-bcd2-6d885303d557)
 
-to run a specific job you need to specify the job just add the job name in the command
+to run a specific job you need to specify the job just add the job name in the command 
 
 ![image](https://github.com/user-attachments/assets/e7540102-c362-43e8-b634-2413cc8f6cfd)

@@ -29,6 +29,48 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DeliveryPackageJobConfig {
 
+    /* Billing Section */
+
+    // nestedBillingJobStep Step #3.2
+    @Bean
+    public Step nestedBillingJobStep(JobRepository jobRepository, Job billingJob) {
+        log.debug("### nestedBillingJobStep()");
+        return new StepBuilder("nestedBillingJobStep", jobRepository)
+                .job(billingJob)
+                .build();
+
+    }
+
+    // Step #3.1
+    @Bean
+    public Step sendInvoiceStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        log.debug("## sendInvoiceStep()");
+        return new StepBuilder("sendInvoiceStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+                        log.info("##Invoce Sent");
+                        System.out.println("== Invoice is sent to the customer");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
+    // billingJob Job #3
+    @Bean
+    public Job billingJob(JobRepository jobRepository, Step sendInvoiceStep) {
+        log.debug("### billingJob()");
+        return new JobBuilder("billingJob", jobRepository)
+                .start(sendInvoiceStep)
+                .build();
+
+    }
+    /* End Billing Section */
+
     /* Flower Job Section */
     @Bean
     public StepExecutionListener selectFlowerListener() {
@@ -36,7 +78,7 @@ public class DeliveryPackageJobConfig {
         return new FlowerSelectionStepExecutionListener();
     }
 
-    // Step #3
+    // Step #2.3
     @Bean
     public Step arrangeFlowersStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## arrangeFlowersStep()");
@@ -55,7 +97,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #2
+    // Step #2.2
     @Bean
     public Step removeThornsStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## removeThornsStep()");
@@ -74,7 +116,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #1
+    // Step #2.1
     @Bean
     public Step selectFlowersStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## selectFlowersStep()");
@@ -94,10 +136,11 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
+    // prepareFlowersJob Job #2
     @Bean
     public Job prepareFlowersJob(JobRepository jobRepository, Step selectFlowersStep, Step removeThornsStep,
             Step arrangeFlowersStep, Flow deliveryFLow) {
-        log.debug("### prepareFlowersJob() repository: " + jobRepository);
+        log.debug("### prepareFlowersJob()");
         return new JobBuilder("prepareFlowersJob", jobRepository)
                 .start(selectFlowersStep)
                 .on("TRIM_REQUIRED").to(removeThornsStep)
@@ -127,6 +170,8 @@ public class DeliveryPackageJobConfig {
         return new ReceiptDecider();
     }
 
+    /* Deliver Section */
+    // External deliveryFLow Flow #1
     @Bean
     public Flow deliveryFLow(Step driveToAddressStep, Step givePackageToCustomerStep, Step thankStep, Step refundStep,
             Step leaveAtDoorStep) {
@@ -144,7 +189,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #7
+    // Step #1.7
     @Bean
     public Step thankStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## thankStep()");
@@ -163,7 +208,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #6
+    // Step #1.6
     @Bean
     public Step refundStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## refundStep()");
@@ -182,7 +227,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #5
+    // Step #1.5
     @Bean
     public Step leaveAtDoorStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## leaveAtDoorStep()");
@@ -201,7 +246,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #4
+    // Step #1.4
     @Bean
     public Step storePackageStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## storePackageStep()");
@@ -220,7 +265,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #3
+    // Step #1.3
     @Bean
     public Step givePackageToCustomerStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## givePackageToCustomerStep()");
@@ -239,7 +284,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #2
+    // Step #1.2
     @Bean
     public Step driveToAddressStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## driveToAddressStep()");
@@ -261,7 +306,7 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Step #1
+    // Step #1.1
     @Bean
     public Step packageItemStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         log.debug("## packageItemStep()");
@@ -281,14 +326,16 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
-    // Job Delivery
+    // Job Delivery Job #1
     @Bean
-    public Job deliverPackageJob(JobRepository jobRepository, Step packageItemStep, Flow deliveryFLow) {
-        log.debug("### deliverPackageJob() repository: " + jobRepository);
+    public Job deliverPackageJob(JobRepository jobRepository, Step packageItemStep, Flow deliveryFLow, Step nestedBillingJobStep) {
+        log.debug("### deliverPackageJob()");
         return new JobBuilder("deliverPackageJob", jobRepository)
                 .start(packageItemStep)
                 .on("*").to(deliveryFLow)
+                .next(nestedBillingJobStep) //Nested Job
                 .end()
                 .build();
     }
+    /* Delivery Section */
 }
