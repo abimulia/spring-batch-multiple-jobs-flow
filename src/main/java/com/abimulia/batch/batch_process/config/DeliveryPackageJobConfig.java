@@ -17,6 +17,7 @@ import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.decider.DeliveryDecider;
@@ -30,6 +31,16 @@ import lombok.extern.slf4j.Slf4j;
 public class DeliveryPackageJobConfig {
 
     /* Billing Section */
+
+    // billingFlow Flow #2
+    @Bean
+    public Flow billingFlow(JobRepository jobRepository, Step sendInvoiceStep) {
+        log.debug("### billingFlow()");
+        return new FlowBuilder<SimpleFlow>("billingFlow")
+                .start(sendInvoiceStep)
+                .build();
+
+    }
 
     // nestedBillingJobStep Step #3.2
     @Bean
@@ -328,12 +339,13 @@ public class DeliveryPackageJobConfig {
 
     // Job Delivery Job #1
     @Bean
-    public Job deliverPackageJob(JobRepository jobRepository, Step packageItemStep, Flow deliveryFLow, Step nestedBillingJobStep) {
+    public Job deliverPackageJob(JobRepository jobRepository, Step packageItemStep, Flow deliveryFLow,
+            Flow billingFlow) {
         log.debug("### deliverPackageJob()");
         return new JobBuilder("deliverPackageJob", jobRepository)
                 .start(packageItemStep)
-                .on("*").to(deliveryFLow)
-                .next(nestedBillingJobStep) //Nested Job
+                .split(new SimpleAsyncTaskExecutor()) //Split for  Parallel Flows
+                .add(deliveryFLow, billingFlow)
                 .end()
                 .build();
     }
