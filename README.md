@@ -17,3 +17,6 @@ Run `mvn spring-boot:run` for a dev server.
 To run job with parameter need to package the project using maven build with goals clean package
 Then run the created jar 
 ` java -jar .\batch-process-1.0.0.jar "item=shoes" "run.date=2024-12-25,java.time.LocalDate"`
+
+to simulate error got lost set the environment variable
+`$env:GOT_LOST = "true"` then to switch back again `$env:GOT_LOST = "false"`

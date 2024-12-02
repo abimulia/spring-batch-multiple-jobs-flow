@@ -9,13 +9,59 @@ import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
 public class DeliveryPackageJobConfig {
+    // Get Environment Variable to simulate error
+    @Value("${GOT_LOST:false}")
+    private String GOT_LOST;
 
+    // Step #3
+    @Bean
+    public Step givePackageToCustomerStep(JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        return new StepBuilder("givePackageToCustomerStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+
+                        System.out.println("== Given the package to the customer.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
+    // Step #2
+    @Bean
+    public Step driveToAddressStep(JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        return new StepBuilder("driveToAddressStep", jobRepository)
+                .tasklet(new Tasklet() {
+
+                    @Override
+                    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext)
+                            throws Exception {
+                        if (GOT_LOST.equalsIgnoreCase("true")) {
+                            throw new RuntimeException("Got lost driving to the address");
+                        }
+
+                        System.out.println("== Successfully arrived at the address.");
+                        return RepeatStatus.FINISHED;
+                    }
+
+                }, transactionManager) // or .chunk(chunkSize, transactionManager)
+                .build();
+    }
+
+    // Step #1
     @Bean
     public Step packageItemStep(JobRepository jobRepository,
             PlatformTransactionManager transactionManager) {
@@ -35,10 +81,13 @@ public class DeliveryPackageJobConfig {
                 .build();
     }
 
+    // Job Delivery
     @Bean
-    public Job deliverPackageJob(JobRepository jobRepository, Step packageItemStep) {
+    public Job deliverPackageJob(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new JobBuilder("deliverPackageJob", jobRepository)
-                .start(packageItemStep)
+                .start(packageItemStep(jobRepository, transactionManager))
+                .next(driveToAddressStep(jobRepository, transactionManager))
+                .next(givePackageToCustomerStep(jobRepository, transactionManager))
                 .build();
     }
 }
