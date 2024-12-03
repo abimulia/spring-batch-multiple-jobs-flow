@@ -26,6 +26,8 @@ import org.springframework.batch.item.validator.BeanValidatingItemProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.exception.OrderProcessingException;
@@ -55,9 +57,22 @@ public class OrdersJobConfig {
         private static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
                         + "from SHIPPED_ORDER order by order_id";
 
-        private static String INSERT_ORDER_SQL = "insert into "
-                        + "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
-                        + " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
+        // private static String INSERT_ORDER_SQL = "insert into "
+        // + "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id,
+        // item_name, cost, ship_date)"
+        // + "
+        // values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
+        public static String INSERT_ORDER_SQL = "insert into "
+                        + "TRACKED_ORDER(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date, tracking_number, free_shipping)"
+                        + " values(:order.orderId,:order.firstName,:order.lastName,:order.email,:order.itemId,:order.itemName,:order.cost,:order.shipDate,:trackingNumber, :freeShipping)";
+
+        @Bean
+        public TaskExecutor taskExecutor() {
+                ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+                executor.setCorePoolSize(2);
+                executor.setMaxPoolSize(10);
+                return executor;
+        }
 
         @Bean
         public CustomRetryListener customRetryListener() {
@@ -114,8 +129,8 @@ public class OrdersJobConfig {
 
         // JdbcBatchItemWriter
         @Bean
-        public ItemWriter<Order> jdbcBatchItemWriter(DataSource dataSource) {
-                return new JdbcBatchItemWriterBuilder<Order>()
+        public ItemWriter<TrackedOrder> jdbcBatchItemWriter(DataSource dataSource) {
+                return new JdbcBatchItemWriterBuilder<TrackedOrder>()
                                 .dataSource(dataSource)
                                 .sql(INSERT_ORDER_SQL)
                                 .beanMapped()
@@ -168,6 +183,7 @@ public class OrdersJobConfig {
                                 .pageSize(10)
                                 .queryProvider(orderQueryProvider)
                                 .rowMapper(new OrderRowMapper())
+                                .saveState(false) //when we use multi-threaded step we are no longer able to to restart the job in a successful state.
                                 .build();
 
         }
@@ -179,7 +195,8 @@ public class OrdersJobConfig {
                         ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor,
                         ItemProcessor<Order, TrackedOrder> compositeItemPrcessor,
                         CustomRetryListener customRetryListener,
-                        ItemWriter<TrackedOrder> jsonFileItemWriter)
+                        ItemWriter<TrackedOrder> jdbcBatchItemWriter,
+                        TaskExecutor taskExecutor)
                         throws Exception {
                 log.debug("## chunkOrderBasedStep()");
                 return new StepBuilder("chunkOrderBasedStep", jobRepository)
@@ -190,7 +207,8 @@ public class OrdersJobConfig {
                                 .retry(OrderProcessingException.class)
                                 .retryLimit(5)
                                 .listener(customRetryListener)
-                                .writer(jsonFileItemWriter)
+                                .writer(jdbcBatchItemWriter)
+                                .taskExecutor(taskExecutor)
                                 .build();
         }
 

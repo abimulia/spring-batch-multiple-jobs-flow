@@ -16,6 +16,8 @@ public class TrackedOrderItemProcessor implements ItemProcessor<Order,TrackedOrd
     @Override
     public TrackedOrder process(Order item) throws Exception {
         System.out.println("## Processing order with id: " + item.orderId());
+        System.out.println("## Processing with thread " + Thread.currentThread().getName());
+
         TrackedOrder trackedOrder = new TrackedOrder(item);
         trackedOrder.setTrackingNumber(this.getTrackingNumber());
         return trackedOrder;
@@ -23,7 +25,7 @@ public class TrackedOrderItemProcessor implements ItemProcessor<Order,TrackedOrd
 
     private String getTrackingNumber() throws OrderProcessingException {
         log.info("getTrackingNumber()");
-        if (Math.random() <.03) {
+        if (Math.random() <.05) {
             throw new OrderProcessingException("Failed to get tracking number");
         }
         return UUID.randomUUID().toString();
