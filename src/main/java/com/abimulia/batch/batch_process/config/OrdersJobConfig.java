@@ -14,7 +14,9 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.PagingQueryProvider;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemWriter;
@@ -25,6 +27,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.abimulia.batch.batch_process.mapper.OrderItemPreparedStatementSetter;
 import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +45,19 @@ public class OrdersJobConfig {
     private static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
             + "from SHIPPED_ORDER order by order_id";
 
+    private static String INSERT_ORDER_SQL = "insert into "
+			+ "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
+			+ " values(?,?,?,?,?,?,?,?)";
+
+    //JdbcBatchItemWriter
+    @Bean
+    public ItemWriter<Order> jdbcBatchItemWriter(DataSource dataSource){
+        return new JdbcBatchItemWriterBuilder<Order>()
+            .dataSource(dataSource)
+            .sql(INSERT_ORDER_SQL)
+            .itemPreparedStatementSetter(new OrderItemPreparedStatementSetter())
+            .build();
+    }
 
     // Flatfile Item writer
     @Bean
@@ -91,12 +107,12 @@ public class OrdersJobConfig {
     // chunkOrderBasedStep Step #1.1
     @Bean
     public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-            ItemReader<Order> jdbcPagingItemReader, ItemWriter<Order> flatFileItemWriter) {
+            ItemReader<Order> jdbcPagingItemReader, ItemWriter<Order> jdbcBatchItemWriter) {
         log.debug("## chunkOrderBasedStep()");
         return new StepBuilder("chunkOrderBasedStep", jobRepository)
                 .<Order, Order>chunk(3, transactionManager)
                 .reader(jdbcPagingItemReader)
-                .writer(flatFileItemWriter).build();
+                .writer(jdbcBatchItemWriter).build();
     }
 
     // chunkOrderJob Job #1
