@@ -1,10 +1,7 @@
 package com.abimulia.batch.batch_process.config;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Date;
-
 import javax.sql.DataSource;
 
 import org.springframework.batch.core.Job;
@@ -14,7 +11,6 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
@@ -22,12 +18,14 @@ import org.springframework.batch.item.database.support.SqlPagingQueryProviderFac
 import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
 import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
+import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
+import org.springframework.batch.item.json.JsonFileItemWriter;
+import org.springframework.batch.item.json.builder.JsonFileItemWriterBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import com.abimulia.batch.batch_process.mapper.OrderItemPreparedStatementSetter;
 import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +47,19 @@ public class OrdersJobConfig {
 			+ "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
 			+ " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
-    //JdbcBatchItemWriter
+    
+    //JsonFileItemWriter
+    @Bean
+    public ItemWriter<Order> jsonFileItemWriter(){
+        return new JsonFileItemWriterBuilder<Order>()
+            .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<Order>())
+            .resource(new FileSystemResource("/data/shipped_orders.output-"+ LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))+".json"))
+            .name("jsonFileItemWriter")
+            .build();
+    }
+
+    
+            //JdbcBatchItemWriter
     @Bean
     public ItemWriter<Order> jdbcBatchItemWriter(DataSource dataSource){
         return new JdbcBatchItemWriterBuilder<Order>()
@@ -107,12 +117,13 @@ public class OrdersJobConfig {
     // chunkOrderBasedStep Step #1.1
     @Bean
     public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-            ItemReader<Order> jdbcPagingItemReader, ItemWriter<Order> jdbcBatchItemWriter) {
+            ItemReader<Order> jdbcPagingItemReader, ItemWriter<Order> jsonFileItemWriter) {
         log.debug("## chunkOrderBasedStep()");
         return new StepBuilder("chunkOrderBasedStep", jobRepository)
                 .<Order, Order>chunk(3, transactionManager)
                 .reader(jdbcPagingItemReader)
-                .writer(jdbcBatchItemWriter).build();
+                .writer(jsonFileItemWriter)
+                .build();
     }
 
     // chunkOrderJob Job #1
