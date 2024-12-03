@@ -31,6 +31,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
 import com.abimulia.batch.batch_process.record.TrackedOrder;
+import com.abimulia.batch.processor.FreeShippingItemProcessor;
 import com.abimulia.batch.processor.TrackedOrderItemProcessor;
 
 import lombok.extern.slf4j.Slf4j;
@@ -56,10 +57,18 @@ public class OrdersJobConfig {
                         + " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
         @Bean
-        public ItemProcessor<Order, TrackedOrder> compositeItemPrcessor(ItemProcessor<Order, Order> orderValidatingItemProcessor,ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor) {
+        public ItemProcessor<TrackedOrder, TrackedOrder> freeShippingItemProcessor() {
+                return new FreeShippingItemProcessor();
+        }
+
+        @Bean
+        public ItemProcessor<Order, TrackedOrder> compositeItemPrcessor(
+                        ItemProcessor<Order, Order> orderValidatingItemProcessor,
+                        ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor,
+                        ItemProcessor<TrackedOrder, TrackedOrder> freeShippingItemProcessor) {
                 return new CompositeItemProcessorBuilder<Order, TrackedOrder>()
-                .delegates(orderValidatingItemProcessor,trackedOrderItemProcessor)
-                .build();
+                                .delegates(orderValidatingItemProcessor, trackedOrderItemProcessor,freeShippingItemProcessor)
+                                .build();
         }
 
         @Bean
