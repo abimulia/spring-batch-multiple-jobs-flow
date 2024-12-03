@@ -1,5 +1,7 @@
 package com.abimulia.batch.batch_process.config;
 
+import javax.sql.DataSource;
+
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -8,15 +10,19 @@ import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.mapper.OrderFieldSetMapper;
+import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
 import com.abimulia.batch.batch_process.writer.SimpleItemWriter;
 
@@ -28,30 +34,29 @@ public class OrdersJobConfig {
     public static String[] tokens = new String[] { "order_id", "first_name", "last_name", "email", "cost", "item_id",
             "item_name", "ship_date" };
 
+    public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
+            + "from SHIPPED_ORDER order by order_id";
 
+    // JDBC Reader
     @Bean
-    public ItemReader<Order> orderItemReader() {
-        FlatFileItemReader<Order> orderItemReader = new FlatFileItemReader<Order>();
-        orderItemReader.setLinesToSkip(1);
-        orderItemReader.setResource(new FileSystemResource("/data/shipped_orders.csv"));
-        DefaultLineMapper<Order> lineMapper = new DefaultLineMapper<Order>();
-        DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
-        tokenizer.setNames(tokens);
-        lineMapper.setLineTokenizer(tokenizer);
-        lineMapper.setFieldSetMapper(new OrderFieldSetMapper()); 
-        orderItemReader.setLineMapper(lineMapper);
-        return orderItemReader;
+    public ItemReader<Order> jdbcItemReader(DataSource dataSource) {
+        return new JdbcCursorItemReaderBuilder<Order>()
+                .dataSource(dataSource)
+                .name("jdbcItemReader")
+                .sql(ORDER_SQL)
+                .rowMapper(new OrderRowMapper())
+                .build();
 
     }
 
     // chunkOrderBasedStep Step #1.1
     @Bean
     public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-            ItemReader<Order> orderItemReader, SimpleItemWriter itemWriter) {
+            ItemReader<Order> jdbcItemReader, SimpleItemWriter itemWriter) {
         log.debug("## chunkOrderBasedStep()");
         return new StepBuilder("chunkOrderBasedStep", jobRepository)
                 .<Order, Order>chunk(3, transactionManager)
-                .reader(orderItemReader)
+                .reader(jdbcItemReader)
                 .writer(new ItemWriter<Order>() {
                     @Override
                     public void write(Chunk<? extends Order> items) throws Exception {
