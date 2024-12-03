@@ -29,6 +29,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.abimulia.batch.batch_process.exception.OrderProcessingException;
+import com.abimulia.batch.batch_process.listener.CustomRetryListener;
 import com.abimulia.batch.batch_process.listener.CustomSkipListener;
 import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
@@ -59,9 +60,15 @@ public class OrdersJobConfig {
                         + " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
         @Bean
-        public CustomSkipListener customOrderSkipListener(){
+        public CustomRetryListener customRetryListener() {
+                return new CustomRetryListener();
+        }
+
+        @Bean
+        public CustomSkipListener customOrderSkipListener() {
                 return new CustomSkipListener();
         }
+
         @Bean
         public ItemProcessor<TrackedOrder, TrackedOrder> freeShippingItemProcessor() {
                 return new FreeShippingItemProcessor();
@@ -73,7 +80,8 @@ public class OrdersJobConfig {
                         ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor,
                         ItemProcessor<TrackedOrder, TrackedOrder> freeShippingItemProcessor) {
                 return new CompositeItemProcessorBuilder<Order, TrackedOrder>()
-                                .delegates(orderValidatingItemProcessor, trackedOrderItemProcessor,freeShippingItemProcessor)
+                                .delegates(orderValidatingItemProcessor, trackedOrderItemProcessor,
+                                                freeShippingItemProcessor)
                                 .build();
         }
 
@@ -170,7 +178,7 @@ public class OrdersJobConfig {
                         ItemReader<Order> jdbcPagingItemReader,
                         ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor,
                         ItemProcessor<Order, TrackedOrder> compositeItemPrcessor,
-                        CustomSkipListener customOrderSkipListener,
+                        CustomRetryListener customRetryListener,
                         ItemWriter<TrackedOrder> jsonFileItemWriter)
                         throws Exception {
                 log.debug("## chunkOrderBasedStep()");
@@ -179,9 +187,9 @@ public class OrdersJobConfig {
                                 .reader(jdbcPagingItemReader)
                                 .processor(compositeItemPrcessor)
                                 .faultTolerant()
-                                .skip(OrderProcessingException.class)
-                                .skipLimit(5)
-                                .listener(customOrderSkipListener)
+                                .retry(OrderProcessingException.class)
+                                .retryLimit(5)
+                                .listener(customRetryListener)
                                 .writer(jsonFileItemWriter)
                                 .build();
         }
