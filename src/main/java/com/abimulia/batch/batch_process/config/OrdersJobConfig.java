@@ -47,7 +47,7 @@ public class OrdersJobConfig {
 
     private static String INSERT_ORDER_SQL = "insert into "
 			+ "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
-			+ " values(?,?,?,?,?,?,?,?)";
+			+ " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
     //JdbcBatchItemWriter
     @Bean
@@ -55,7 +55,7 @@ public class OrdersJobConfig {
         return new JdbcBatchItemWriterBuilder<Order>()
             .dataSource(dataSource)
             .sql(INSERT_ORDER_SQL)
-            .itemPreparedStatementSetter(new OrderItemPreparedStatementSetter())
+            .beanMapped()
             .build();
     }
 
