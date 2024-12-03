@@ -28,6 +28,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.abimulia.batch.batch_process.exception.OrderProcessingException;
+import com.abimulia.batch.batch_process.listener.CustomSkipListener;
 import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
 import com.abimulia.batch.batch_process.record.TrackedOrder;
@@ -56,6 +58,10 @@ public class OrdersJobConfig {
                         + "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
                         + " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
+        @Bean
+        public CustomSkipListener customOrderSkipListener(){
+                return new CustomSkipListener();
+        }
         @Bean
         public ItemProcessor<TrackedOrder, TrackedOrder> freeShippingItemProcessor() {
                 return new FreeShippingItemProcessor();
@@ -164,6 +170,7 @@ public class OrdersJobConfig {
                         ItemReader<Order> jdbcPagingItemReader,
                         ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor,
                         ItemProcessor<Order, TrackedOrder> compositeItemPrcessor,
+                        CustomSkipListener customOrderSkipListener,
                         ItemWriter<TrackedOrder> jsonFileItemWriter)
                         throws Exception {
                 log.debug("## chunkOrderBasedStep()");
@@ -171,6 +178,10 @@ public class OrdersJobConfig {
                                 .<Order, TrackedOrder>chunk(3, transactionManager)
                                 .reader(jdbcPagingItemReader)
                                 .processor(compositeItemPrcessor)
+                                .faultTolerant()
+                                .skip(OrderProcessingException.class)
+                                .skipLimit(5)
+                                .listener(customOrderSkipListener)
                                 .writer(jsonFileItemWriter)
                                 .build();
         }
