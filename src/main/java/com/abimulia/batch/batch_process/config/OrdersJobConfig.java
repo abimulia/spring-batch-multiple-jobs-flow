@@ -9,6 +9,7 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.PagingQueryProvider;
@@ -21,6 +22,7 @@ import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
 import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
 import org.springframework.batch.item.json.JsonFileItemWriter;
 import org.springframework.batch.item.json.builder.JsonFileItemWriterBuilder;
+import org.springframework.batch.item.validator.BeanValidatingItemProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
@@ -35,7 +37,7 @@ import lombok.extern.slf4j.Slf4j;
 public class OrdersJobConfig {
 
     private static String[] names = new String[] { "orderId", "firstName", "lastName", "email", "cost", "itemId",
-			"itemName", "shipDate" };
+            "itemName", "shipDate" };
 
     private static String[] tokens = new String[] { "order_id", "first_name", "last_name", "email", "cost", "item_id",
             "item_name", "ship_date" };
@@ -44,10 +46,16 @@ public class OrdersJobConfig {
             + "from SHIPPED_ORDER order by order_id";
 
     private static String INSERT_ORDER_SQL = "insert into "
-			+ "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
-			+ " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
+            + "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
+            + " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
-    
+    @Bean
+    public ItemProcessor<Order, Order> orderValidatingItemProcessor() throws Exception{
+        BeanValidatingItemProcessor<Order> orderItemPocessor = new BeanValidatingItemProcessor<Order>();
+        orderItemPocessor.setFilter(true);
+        return orderItemPocessor;
+    }
+
     //JsonFileItemWriter
     @Bean
     public ItemWriter<Order> jsonFileItemWriter(){
@@ -103,7 +111,7 @@ public class OrdersJobConfig {
 
     // JDBC Reader
     @Bean
-    public ItemReader<Order> jdbcPagingItemReader(DataSource dataSource, PagingQueryProvider orderQueryProvider) {
+    public ItemReader<Order> jdbcPagingItemReader(DataSource dataSource, PagingQueryProvider orderQueryProvider) throws Exception{
         return new JdbcPagingItemReaderBuilder<Order>()
                 .dataSource(dataSource)
                 .name("jdbcPagintItemReader")
@@ -117,18 +125,22 @@ public class OrdersJobConfig {
     // chunkOrderBasedStep Step #1.1
     @Bean
     public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-            ItemReader<Order> jdbcPagingItemReader, ItemWriter<Order> jsonFileItemWriter) {
+            ItemReader<Order> jdbcPagingItemReader, ItemProcessor<Order, Order> orderValidatingItemProcessor,ItemWriter<Order> jsonFileItemWriter) throws Exception {
         log.debug("## chunkOrderBasedStep()");
         return new StepBuilder("chunkOrderBasedStep", jobRepository)
                 .<Order, Order>chunk(3, transactionManager)
                 .reader(jdbcPagingItemReader)
+                .processor(orderValidatingItemProcessor)
                 .writer(jsonFileItemWriter)
                 .build();
     }
 
+
+
+
     // chunkOrderJob Job #1
     @Bean
-    public Job chunkOrderJob(JobRepository jobRepository, Step chunkOrderBasedStep) {
+    public Job chunkOrderJob(JobRepository jobRepository, Step chunkOrderBasedStep) throws Exception {
         log.debug("### chunkOrderJob()");
         return new JobBuilder("chunkOrderJob", jobRepository)
                 .start(chunkOrderBasedStep)
