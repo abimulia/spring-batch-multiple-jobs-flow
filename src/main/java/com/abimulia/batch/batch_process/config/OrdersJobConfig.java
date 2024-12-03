@@ -11,7 +11,10 @@ import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
+import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
@@ -37,13 +40,24 @@ public class OrdersJobConfig {
     public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
             + "from SHIPPED_ORDER order by order_id";
 
+    @Bean
+    public PagingQueryProvider orderQueryProvider(DataSource dataSource) throws Exception {
+        SqlPagingQueryProviderFactoryBean factory = new SqlPagingQueryProviderFactoryBean();
+        factory.setSelectClause("select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date");
+        factory.setFromClause("from SHIPPED_ORDER");
+        factory.setSortKey("order_id");
+        factory.setDataSource(dataSource);
+        return factory.getObject();
+    }
+
     // JDBC Reader
     @Bean
-    public ItemReader<Order> jdbcItemReader(DataSource dataSource) {
-        return new JdbcCursorItemReaderBuilder<Order>()
+    public ItemReader<Order> jdbcPagingItemReader(DataSource dataSource, PagingQueryProvider orderQueryProvider) {
+        return new JdbcPagingItemReaderBuilder<Order>()
                 .dataSource(dataSource)
-                .name("jdbcItemReader")
-                .sql(ORDER_SQL)
+                .name("jdbcPagintItemReader")
+                .pageSize(10)
+                .queryProvider(orderQueryProvider)
                 .rowMapper(new OrderRowMapper())
                 .build();
 
@@ -52,11 +66,11 @@ public class OrdersJobConfig {
     // chunkOrderBasedStep Step #1.1
     @Bean
     public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-            ItemReader<Order> jdbcItemReader, SimpleItemWriter itemWriter) {
+            ItemReader<Order> jdbcPagingItemReader, SimpleItemWriter itemWriter) {
         log.debug("## chunkOrderBasedStep()");
         return new StepBuilder("chunkOrderBasedStep", jobRepository)
                 .<Order, Order>chunk(3, transactionManager)
-                .reader(jdbcItemReader)
+                .reader(jdbcPagingItemReader)
                 .writer(new ItemWriter<Order>() {
                     @Override
                     public void write(Chunk<? extends Order> items) throws Exception {

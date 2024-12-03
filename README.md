@@ -33,6 +33,9 @@ additional setting for another condition is
 to run the flower job  
 `java -jar "-Dspring.batch.job.name=prepareFlowersJob" .\batch-process-1.0.0.jar "type=roses" "run.date=2024-12-16,java.time.LocalDate"`
 
+to run the order job  
+`java -jar "-Dspring.batch.job.name=chunkOrderJob" .\batch-process-1.0.0.jar "run.date=2024-12-19,java.time.LocalDate"`
+
 When there are multiple jobs we need to specify one default job name in the application.properties  
 `spring.batch.job.name=deliverPackageJob`
 
