@@ -21,6 +21,7 @@ import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
 import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
 import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
 import org.springframework.batch.item.json.builder.JsonFileItemWriterBuilder;
+import org.springframework.batch.item.support.builder.CompositeItemProcessorBuilder;
 import org.springframework.batch.item.validator.BeanValidatingItemProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,8 +56,15 @@ public class OrdersJobConfig {
                         + " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
         @Bean
+        public ItemProcessor<Order, TrackedOrder> compositeItemPrcessor(ItemProcessor<Order, Order> orderValidatingItemProcessor,ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor) {
+                return new CompositeItemProcessorBuilder<Order, TrackedOrder>()
+                .delegates(orderValidatingItemProcessor,trackedOrderItemProcessor)
+                .build();
+        }
+
+        @Bean
         public ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor() {
-               return new TrackedOrderItemProcessor();
+                return new TrackedOrderItemProcessor();
         }
 
         @Bean
@@ -146,13 +154,14 @@ public class OrdersJobConfig {
         public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
                         ItemReader<Order> jdbcPagingItemReader,
                         ItemProcessor<Order, TrackedOrder> trackedOrderItemProcessor,
+                        ItemProcessor<Order, TrackedOrder> compositeItemPrcessor,
                         ItemWriter<TrackedOrder> jsonFileItemWriter)
                         throws Exception {
                 log.debug("## chunkOrderBasedStep()");
                 return new StepBuilder("chunkOrderBasedStep", jobRepository)
                                 .<Order, TrackedOrder>chunk(3, transactionManager)
                                 .reader(jdbcPagingItemReader)
-                                .processor(trackedOrderItemProcessor)
+                                .processor(compositeItemPrcessor)
                                 .writer(jsonFileItemWriter)
                                 .build();
         }
