@@ -1,5 +1,10 @@
 package com.abimulia.batch.batch_process.config;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
+
 import javax.sql.DataSource;
 
 import org.springframework.batch.core.Job;
@@ -7,38 +12,58 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.PagingQueryProvider;
-import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
-import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.mapping.DefaultLineMapper;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.batch.item.file.FlatFileItemWriter;
+import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
+import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import com.abimulia.batch.batch_process.mapper.OrderFieldSetMapper;
 import com.abimulia.batch.batch_process.mapper.OrderRowMapper;
 import com.abimulia.batch.batch_process.record.Order;
-import com.abimulia.batch.batch_process.writer.SimpleItemWriter;
-
 import lombok.extern.slf4j.Slf4j;
 
 @Configuration
 @Slf4j
 public class OrdersJobConfig {
-    public static String[] tokens = new String[] { "order_id", "first_name", "last_name", "email", "cost", "item_id",
+
+    private static String[] names = new String[] { "orderId", "firstName", "lastName", "email", "cost", "itemId",
+			"itemName", "shipDate" };
+
+    private static String[] tokens = new String[] { "order_id", "first_name", "last_name", "email", "cost", "item_id",
             "item_name", "ship_date" };
 
-    public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
+    private static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
             + "from SHIPPED_ORDER order by order_id";
+
+
+    // Flatfile Item writer
+    @Bean
+    public ItemWriter<Order> flatFileItemWriter(){
+        FlatFileItemWriter<Order> flatFileItemWriter = new FlatFileItemWriter<Order>();
+        flatFileItemWriter.setResource(new FileSystemResource("/data/shipped_orders_output"+LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))+".csv"));
+        
+        DelimitedLineAggregator<Order> delimitedLineAggregator = new DelimitedLineAggregator<Order>();
+        delimitedLineAggregator.setDelimiter(",");
+
+        BeanWrapperFieldExtractor<Order> fieldExtractor = new BeanWrapperFieldExtractor<Order>();
+        fieldExtractor.setNames(names);
+        delimitedLineAggregator.setFieldExtractor(fieldExtractor);
+
+        flatFileItemWriter.setLineAggregator(delimitedLineAggregator);
+
+        return flatFileItemWriter;
+
+
+
+    }
+
 
     @Bean
     public PagingQueryProvider orderQueryProvider(DataSource dataSource) throws Exception {
@@ -66,21 +91,12 @@ public class OrdersJobConfig {
     // chunkOrderBasedStep Step #1.1
     @Bean
     public Step chunkOrderBasedStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-            ItemReader<Order> jdbcPagingItemReader, SimpleItemWriter itemWriter) {
+            ItemReader<Order> jdbcPagingItemReader, ItemWriter<Order> flatFileItemWriter) {
         log.debug("## chunkOrderBasedStep()");
         return new StepBuilder("chunkOrderBasedStep", jobRepository)
                 .<Order, Order>chunk(3, transactionManager)
                 .reader(jdbcPagingItemReader)
-                .writer(new ItemWriter<Order>() {
-                    @Override
-                    public void write(Chunk<? extends Order> items) throws Exception {
-                        System.out.println(String.format("Received list of size: %s", items.size()));
-                        for (Order item : items) {
-                            System.out.println("Output: [" + item.firstName() + " - " + item.lastName() + " - "
-                                    + item.email() + "]"); // Output to console
-                        }
-                    }
-                }).build();
+                .writer(flatFileItemWriter).build();
     }
 
     // chunkOrderJob Job #1
